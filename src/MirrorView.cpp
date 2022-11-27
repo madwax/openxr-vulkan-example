@@ -106,6 +106,11 @@ void MirrorView::processWindowEvents() const
 
 MirrorView::RenderResult MirrorView::render(uint32_t swapchainImageIndex)
 {
+  if (this->headset == nullptr)
+  {
+    return MirrorView::RenderResult::Invisible;
+  }
+
   if (swapchainResolution.width == 0u || swapchainResolution.height == 0u)
   {
     // Just check for maximizing as long as the window is minimized

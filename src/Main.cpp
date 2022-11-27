@@ -7,6 +7,8 @@
 
 int main()
 {
+  const bool enableMirrorView = true;
+
   Context context;
   if (!context.isValid())
   {
@@ -36,9 +38,12 @@ int main()
     return EXIT_FAILURE;
   }
 
-  if (!mirrorView.connect(&headset, &renderer))
+  if (enableMirrorView)
   {
-    return EXIT_FAILURE;
+    if (!mirrorView.connect(&headset, &renderer))
+    {
+      return EXIT_FAILURE;
+    }
   }
 
   // Main loop
