@@ -635,6 +635,8 @@ bool Context::createDevice(VkSurfaceKHR mirrorSurface)
 
   // Add the required swapchain extension for mirror view
   vulkanDeviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+  // remove the old debugging ext
+  util::removeExtension(vulkanDeviceExtensions, VK_EXT_DEBUG_MARKER_EXTENSION_NAME);
 
   // Check that all Vulkan device extensions are supported
   {
