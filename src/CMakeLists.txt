@@ -13,6 +13,9 @@ set(SRC
   Buffer.cpp
   Buffer.h
 
+  UniformBufferBuilder.cpp
+  UniformBufferBuilder.h
+
   Context.cpp
   Context.h
 

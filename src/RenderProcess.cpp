@@ -1,5 +1,4 @@
 #include "RenderProcess.h"
-
 #include "Buffer.h"
 #include "Util.h"
 
@@ -10,19 +9,21 @@ RenderProcess::RenderProcess(VkDevice device,
                              VkCommandPool commandPool,
                              VkDescriptorPool descriptorPool,
                              VkDescriptorSetLayout descriptorSetLayout)
-: device(device)
+: uniformBufferBuilder(physicalDevice)
+, device(device)
 {
   // Initialize the uniform buffer data
-  uniformBufferData.world = glm::mat4(1.0f);
-  uniformBufferData.viewProjection[0] = glm::mat4(1.0f);
-  uniformBufferData.viewProjection[1] = glm::mat4(1.0f);
-  uniformBufferData.time = 0.0f;
+  uniformBufferDataScene.world = glm::mat4(1.0f);
+  uniformBufferDataScene.viewProjection[0] = glm::mat4(1.0f);
+  uniformBufferDataScene.viewProjection[1] = glm::mat4(1.0f);
+  uniformBufferDataAnimation.time = 0.0f;
 
   // Allocate a command buffer
   VkCommandBufferAllocateInfo commandBufferAllocateInfo{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
   commandBufferAllocateInfo.commandPool = commandPool;
   commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
   commandBufferAllocateInfo.commandBufferCount = 1u;
+
   if (vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, &commandBuffer) != VK_SUCCESS)
   {
     util::error(Error::GenericVulkan);
@@ -56,11 +57,12 @@ RenderProcess::RenderProcess(VkDevice device,
     return;
   }
 
-  // Create an empty uniform buffer
-  constexpr VkDeviceSize uniformBufferSize = static_cast<VkDeviceSize>(sizeof(UniformBufferData));
+  uniformBufferBuilder.add(sizeof(UniformBufferDataScene));
+  uniformBufferBuilder.add(sizeof(UniformBufferDataAnimation));
+
   uniformBuffer =
     new Buffer(device, physicalDevice, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-               VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBufferSize);
+               VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBufferBuilder.toAllock());
   if (!uniformBuffer->isValid())
   {
     valid = false;
@@ -84,14 +86,14 @@ RenderProcess::RenderProcess(VkDevice device,
   std::array<VkDescriptorBufferInfo, 2u> descriptorBufferInfos;
 
   descriptorBufferInfos.at(0u).buffer = uniformBuffer->getVkBuffer();
-  descriptorBufferInfos.at(0u).offset = 0u;
-  descriptorBufferInfos.at(0u).range = offsetof(UniformBufferData, time);
+  descriptorBufferInfos.at(0u).offset = uniformBufferBuilder.offset(0);
+  descriptorBufferInfos.at(0u).range = uniformBufferBuilder.size(0);
 
   descriptorBufferInfos.at(1u).buffer = uniformBuffer->getVkBuffer();
-  descriptorBufferInfos.at(1u).offset = descriptorBufferInfos.at(0u).range;
-  descriptorBufferInfos.at(1u).range = sizeof(float);
+  descriptorBufferInfos.at(1u).offset = uniformBufferBuilder.offset(1);
+  descriptorBufferInfos.at(1u).range = uniformBufferBuilder.size(1);
 
-  std::array<VkWriteDescriptorSet, 2u> writeDescriptorSets;
+  std::array<VkWriteDescriptorSet, 2u> writeDescriptorSets{};
 
   writeDescriptorSets.at(0u).sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
   writeDescriptorSets.at(0u).pNext = nullptr;
@@ -166,7 +168,9 @@ bool RenderProcess::updateUniformBufferData() const
     return false;
   }
 
-  memcpy(data, &uniformBufferData, sizeof(UniformBufferData));
+  uniformBufferBuilder.copy(data, &uniformBufferDataScene, 0);
+  uniformBufferBuilder.copy(data, &uniformBufferDataAnimation, 1);
+
   uniformBuffer->unmap();
 
   return true;

@@ -285,15 +285,15 @@ void Renderer::render(size_t swapchainImageIndex, float deltaTime)
   }
 
   // Update the uniform buffer data
-  renderProcess->uniformBufferData.world = glm::translate(glm::mat4(1.0f), { 0.0f, 0.0f, 0.0f });
+  renderProcess->uniformBufferDataScene.world = glm::translate(glm::mat4(1.0f), { 0.0f, 0.0f, 0.0f });
   for (size_t eyeIndex = 0u; eyeIndex < headset->getEyeCount(); ++eyeIndex)
   {
-    renderProcess->uniformBufferData.viewProjection[eyeIndex] =
+    renderProcess->uniformBufferDataScene.viewProjection[eyeIndex] =
       headset->getEyeProjectionMatrix(eyeIndex) * headset->getEyeViewMatrix(eyeIndex);
   }
 
   static float time = 0.0f;
-  renderProcess->uniformBufferData.time = time;
+  renderProcess->uniformBufferDataAnimation.time = time;
   time += deltaTime * 2.0f;
 
   if (!renderProcess->updateUniformBufferData())

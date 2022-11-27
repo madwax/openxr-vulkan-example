@@ -4,6 +4,8 @@
 
 #include <vulkan/vulkan.h>
 
+#include "UniformBufferBuilder.h"
+
 class Buffer;
 
 class RenderProcess final
@@ -16,12 +18,18 @@ public:
                 VkDescriptorSetLayout descriptorSetLayout);
   ~RenderProcess();
 
-  struct UniformBufferData final
+  #pragma pack(push, 1)
+  struct UniformBufferDataScene final
   {
     glm::mat4 world;
     glm::mat4 viewProjection[2]; // View projection matrices, 0 = left eye, 1 = right eye
+  } uniformBufferDataScene;
+
+  struct UniformBufferDataAnimation final
+  {
     float time;                  // For animation
-  } uniformBufferData;
+  } uniformBufferDataAnimation;
+  #pragma pack(pop)
 
   bool isValid() const;
   VkCommandBuffer getCommandBuffer() const;
@@ -41,4 +49,5 @@ private:
   VkFence busyFence = nullptr;
   Buffer* uniformBuffer = nullptr;
   VkDescriptorSet descriptorSet = nullptr;
+  mutable UniformBufferBuilder uniformBufferBuilder;
 };
