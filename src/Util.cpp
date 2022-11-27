@@ -150,3 +150,19 @@ glm::mat4 util::createProjectionMatrix(XrFovf fov, float nearClip, float farClip
   projectionMatrix[3] = { 0.0f, 0.0f, -(farClip * (nearClip + nearClip)) / (farClip - nearClip), 0.0f };
   return projectionMatrix;
 }
+
+void util::removeExtension(std::vector<const char*>& from, const char* toRemove)
+{
+    auto it = std::begin(from); 
+    while (it != std::end(from))
+    {
+      if (strcmp(*it, toRemove) == 0)
+      {
+        it = from.erase(it);
+      }
+      else
+      {
+        ++it;
+      }
+    }
+}

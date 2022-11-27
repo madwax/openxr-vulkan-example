@@ -42,6 +42,8 @@ std::vector<const char*> unpackExtensionString(const std::string& string);
 // Loads a shader from 'file' into 'shaderModule', returns false on error
 bool loadShaderFromFile(VkDevice device, const std::string& filename, VkShaderModule& shaderModule);
 
+void removeExtension(std::vector<const char*>& from, const char* toRemove);
+
 // Creates an identity pose
 XrPosef makeIdentity();
 
