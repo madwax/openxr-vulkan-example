@@ -237,6 +237,8 @@ Renderer::~Renderer()
   }
 }
 
+#include <iostream>
+
 void Renderer::render(const glm::mat4& cameraMatrix, size_t swapchainImageIndex, float time)
 {
   currentRenderProcessIndex = (currentRenderProcessIndex + 1u) % renderProcesses.size();
@@ -244,6 +246,31 @@ void Renderer::render(const glm::mat4& cameraMatrix, size_t swapchainImageIndex,
   RenderProcess* renderProcess = renderProcesses.at(currentRenderProcessIndex);
 
   const VkFence busyFence = renderProcess->getBusyFence();
+
+
+  auto resultWait = vkWaitForFences(context->getVkDevice(), 1u, &busyFence, VK_TRUE, 300000 );
+  switch( resultWait )
+  {
+    case VK_SUCCESS:
+    {
+
+    } break;
+
+    case VK_TIMEOUT:
+    {
+      std::cout << " --------------------- We timedout waiting for Fence ---------------" << std::endl;
+    } break;
+
+    default:
+    {
+      std::cout << " --------------------- Error on waiting for Fence Error: " << resultWait << "---------------" << std::endl;
+      return;
+    } 
+  }
+
+
+
+
   if (vkResetFences(context->getVkDevice(), 1u, &busyFence) != VK_SUCCESS)
   {
     return;

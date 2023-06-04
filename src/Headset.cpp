@@ -8,12 +8,32 @@
 #include <glm/mat4x4.hpp>
 
 #include <array>
+#include <iostream>
 
 namespace
 {
 constexpr XrReferenceSpaceType spaceType = XR_REFERENCE_SPACE_TYPE_STAGE;
 constexpr VkFormat colorFormat = VK_FORMAT_R8G8B8A8_SRGB;
 constexpr VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;
+
+
+std::string ToString( const XrSessionState state )
+{
+  switch( state )
+  {
+    case XR_SESSION_STATE_UNKNOWN: { return {"XR_SESSION_STATE_UNKNOWN"}; }
+    case XR_SESSION_STATE_IDLE: { return {"XR_SESSION_STATE_IDLE"}; }
+    case XR_SESSION_STATE_READY: { return {"XR_SESSION_STATE_READY"}; }
+    case XR_SESSION_STATE_SYNCHRONIZED: { return {"XR_SESSION_STATE_SYNCHRONIZED"}; }
+    case XR_SESSION_STATE_VISIBLE: { return {"XR_SESSION_STATE_VISIBLE"}; }
+    case XR_SESSION_STATE_FOCUSED: { return {"XR_SESSION_STATE_FOCUSED"}; }
+    case XR_SESSION_STATE_STOPPING: { return {"XR_SESSION_STATE_STOPPING"}; }
+    case XR_SESSION_STATE_LOSS_PENDING: { return {"XR_SESSION_STATE_LOSS_PENDING"}; }
+    case XR_SESSION_STATE_EXITING: { return {"XR_SESSION_STATE_EXITING"}; }
+    default: { return {"XR_SESSION_STATE_WTF" }; }
+  }
+}
+
 } // namespace
 
 Headset::Headset(const Context* context) : context(context)
@@ -245,6 +265,7 @@ Headset::Headset(const Context* context) : context(context)
     swapchainCreateInfo.arraySize = static_cast<uint32_t>(eyeCount);
     swapchainCreateInfo.faceCount = 1u;
     swapchainCreateInfo.mipCount = 1u;
+    swapchainCreateInfo.usageFlags = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT | XR_SWAPCHAIN_USAGE_TRANSFER_SRC_BIT;
 
     result = xrCreateSwapchain(session, &swapchainCreateInfo, &swapchain);
     if (XR_FAILED(result))
@@ -324,17 +345,13 @@ Headset::Headset(const Context* context) : context(context)
 Headset::~Headset()
 {
   // Clean up OpenXR
-  if (session)
-  {
-    xrEndSession(session);
-  }
 
   if (swapchain)
   {
     xrDestroySwapchain(swapchain);
   }
 
-  for (const RenderTarget* renderTarget : swapchainRenderTargets)
+  for (const RenderTarget* renderTarget : swapchainRenderTargets) 
   {
     delete renderTarget;
   }
@@ -371,46 +388,62 @@ Headset::BeginFrameResult Headset::beginFrame(uint32_t& swapchainImageIndex)
 {
   const XrInstance instance = context->getXrInstance();
 
+  std::cout << "++++ Polling >>>>" << std::endl;
+
   // Poll OpenXR events
   XrEventDataBuffer buffer{ XR_TYPE_EVENT_DATA_BUFFER };
   while (xrPollEvent(instance, &buffer) == XR_SUCCESS)
   {
     switch (buffer.type)
     {
-    case XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING:
-      exitRequested = true;
-      return BeginFrameResult::SkipFully;
-    case XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED:
-    {
-      XrEventDataSessionStateChanged* event = reinterpret_cast<XrEventDataSessionStateChanged*>(&buffer);
-      sessionState = event->state;
+      default:
+      {
+        std::cout << "++++   PollEvent Type: " << buffer.type << std::endl;
+      } break;
 
-      if (event->state == XR_SESSION_STATE_READY)
+      case XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING:
       {
-        if (!beginSession())
-        {
-          return BeginFrameResult::Error;
-        }
-      }
-      else if (event->state == XR_SESSION_STATE_STOPPING)
-      {
-        if (!endSession())
-        {
-          return BeginFrameResult::Error;
-        }
-      }
-      else if (event->state == XR_SESSION_STATE_LOSS_PENDING || event->state == XR_SESSION_STATE_EXITING)
-      {
+        std::cout << "++++   PollEvent Type: XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING" << std::endl;
+
         exitRequested = true;
         return BeginFrameResult::SkipFully;
       }
 
-      break;
-    }
+      case XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED:
+      {
+
+        XrEventDataSessionStateChanged* event = reinterpret_cast<XrEventDataSessionStateChanged*>(&buffer);
+
+        std::cout << "++++   PollEvent Type: XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED Delta : " << ToString( sessionState ) << " -> " << ToString( event->state ) << std::endl;
+
+        sessionState = event->state;
+
+        if (event->state == XR_SESSION_STATE_READY)
+        {
+          if (!beginSession())
+          {
+            return BeginFrameResult::Error;
+          }
+        }
+        else if (event->state == XR_SESSION_STATE_STOPPING)
+        {
+          if (!endSession())
+          {
+            return BeginFrameResult::Error;
+          }
+        }
+        else if (event->state == XR_SESSION_STATE_LOSS_PENDING || event->state == XR_SESSION_STATE_EXITING)
+        {
+          exitRequested = true;
+          return BeginFrameResult::SkipFully;
+        }
+      } break;
     }
 
     buffer.type = XR_TYPE_EVENT_DATA_BUFFER;
   }
+
+  std::cout << "++++ Polling <<<<" << std::endl;
 
   if (sessionState != XR_SESSION_STATE_READY && sessionState != XR_SESSION_STATE_SYNCHRONIZED &&
       sessionState != XR_SESSION_STATE_VISIBLE && sessionState != XR_SESSION_STATE_FOCUSED)
@@ -504,41 +537,70 @@ Headset::BeginFrameResult Headset::beginFrame(uint32_t& swapchainImageIndex)
   return BeginFrameResult::RenderFully; // Request full rendering of the frame
 }
 
-void Headset::endFrame() const
+void Headset::endFrame( const Headset::BeginFrameResult& frameResult )
 {
-  // Release the swapchain image
-  XrSwapchainImageReleaseInfo swapchainImageReleaseInfo{ XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO };
-  XrResult result = xrReleaseSwapchainImage(swapchain, &swapchainImageReleaseInfo);
-  if (XR_FAILED(result))
+  switch( frameResult )
   {
-    return;
+    case Headset::BeginFrameResult::RenderFully:
+    {
+      // Release the swapchain image
+      XrSwapchainImageReleaseInfo swapchainImageReleaseInfo{ XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO };
+      XrResult result = xrReleaseSwapchainImage(swapchain, &swapchainImageReleaseInfo);
+      if (XR_FAILED(result))
+      {
+        return;
+      }
+
+      // End the frame
+      XrCompositionLayerProjection compositionLayerProjection{ XR_TYPE_COMPOSITION_LAYER_PROJECTION };
+      compositionLayerProjection.space = space;
+      compositionLayerProjection.viewCount = static_cast<uint32_t>(eyeRenderInfos.size());
+      compositionLayerProjection.views = eyeRenderInfos.data();
+
+      std::vector<XrCompositionLayerBaseHeader*> layers;
+
+      const bool positionValid = viewState.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT;
+      const bool orientationValid = viewState.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT;
+      if (frameState.shouldRender && positionValid && orientationValid)
+      {
+        layers.push_back(reinterpret_cast<XrCompositionLayerBaseHeader*>(&compositionLayerProjection));
+      }
+
+      XrFrameEndInfo frameEndInfo{ XR_TYPE_FRAME_END_INFO };
+      frameEndInfo.displayTime = frameState.predictedDisplayTime;
+      frameEndInfo.layerCount = static_cast<uint32_t>(layers.size());
+      frameEndInfo.layers = layers.data();
+      frameEndInfo.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
+      result = xrEndFrame(session, &frameEndInfo);
+      if (XR_FAILED(result))
+      {
+        return;
+      }
+    } break;
+
+    case Headset::BeginFrameResult::SkipRender:
+    {
+      XrFrameEndInfo frameEndInfo{ XR_TYPE_FRAME_END_INFO };
+      frameEndInfo.displayTime = frameState.predictedDisplayTime;
+      frameEndInfo.layerCount = 0;
+      frameEndInfo.layers = nullptr;
+      frameEndInfo.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
+      auto result = xrEndFrame(session, &frameEndInfo);
+      if (XR_FAILED(result))
+      {
+        return;
+      }
+    } break;
+
+    default:
+    {
+    }
   }
 
-  // End the frame
-  XrCompositionLayerProjection compositionLayerProjection{ XR_TYPE_COMPOSITION_LAYER_PROJECTION };
-  compositionLayerProjection.space = space;
-  compositionLayerProjection.viewCount = static_cast<uint32_t>(eyeRenderInfos.size());
-  compositionLayerProjection.views = eyeRenderInfos.data();
 
-  std::vector<XrCompositionLayerBaseHeader*> layers;
 
-  const bool positionValid = viewState.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT;
-  const bool orientationValid = viewState.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT;
-  if (frameState.shouldRender && positionValid && orientationValid)
-  {
-    layers.push_back(reinterpret_cast<XrCompositionLayerBaseHeader*>(&compositionLayerProjection));
-  }
 
-  XrFrameEndInfo frameEndInfo{ XR_TYPE_FRAME_END_INFO };
-  frameEndInfo.displayTime = frameState.predictedDisplayTime;
-  frameEndInfo.layerCount = static_cast<uint32_t>(layers.size());
-  frameEndInfo.layers = layers.data();
-  frameEndInfo.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
-  result = xrEndFrame(session, &frameEndInfo);
-  if (XR_FAILED(result))
-  {
-    return;
-  }
+
 }
 
 bool Headset::isValid() const

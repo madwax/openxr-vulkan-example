@@ -34,7 +34,7 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
 }
 } // namespace
 
-MirrorView::MirrorView(const Context* context) : context(context)
+MirrorView::MirrorView(const Context* context, const bool enabled ) : context(context), enabled(enabled)
 {
   // Create a fullscreen window
   GLFWmonitor* monitor = glfwGetPrimaryMonitor();
@@ -67,22 +67,27 @@ MirrorView::MirrorView(const Context* context) : context(context)
   // Hide the mouse cursor
   glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
 
-  // Create a surface for the window
-  VkResult result = glfwCreateWindowSurface(context->getVkInstance(), window, nullptr, &surface);
-  if (result != VK_SUCCESS)
   {
-    util::error(Error::GenericGLFW);
-    valid = false;
-    return;
+    // Create a surface for the window
+    VkResult result = glfwCreateWindowSurface(context->getVkInstance(), window, nullptr, &surface);
+    if (result != VK_SUCCESS)
+    {
+      util::error(Error::GenericGLFW);
+      valid = false;
+      return;
+    }
   }
 }
 
 MirrorView::~MirrorView()
 {
-  const VkDevice device = context->getVkDevice();
-  if (device && swapchain)
+  if( enabled )
   {
-    vkDestroySwapchainKHR(device, swapchain, nullptr);
+    const VkDevice device = context->getVkDevice();
+    if (device && swapchain)
+    {
+      vkDestroySwapchainKHR(device, swapchain, nullptr);
+    }
   }
 
   const VkInstance instance = context->getVkInstance();
@@ -95,7 +100,6 @@ MirrorView::~MirrorView()
   {
     glfwDestroyWindow(window);
   }
-
   glfwTerminate();
 }
 
@@ -106,8 +110,14 @@ void MirrorView::onWindowResize()
 
 bool MirrorView::connect(const Headset* headset, const Renderer* renderer)
 {
+  if (!enabled)
+  {
+    return true;
+  }
+
   this->headset = headset;
   this->renderer = renderer;
+
 
   if (!recreateSwapchain())
   {
@@ -124,6 +134,11 @@ void MirrorView::processWindowEvents() const
 
 MirrorView::RenderResult MirrorView::render(uint32_t swapchainImageIndex)
 {
+  if (!enabled)
+  {
+    return RenderResult::Invisible;
+  }
+
   if (swapchainResolution.width == 0u || swapchainResolution.height == 0u)
   {
     // Just check for maximizing as long as the window is minimized
@@ -269,6 +284,11 @@ MirrorView::RenderResult MirrorView::render(uint32_t swapchainImageIndex)
 
 void MirrorView::present()
 {
+  if (!enabled)
+  {
+    return;
+  }
+
   const VkSemaphore presentableSemaphore = renderer->getCurrentPresentableSemaphore();
 
   VkPresentInfoKHR presentInfo{ VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
@@ -310,6 +330,12 @@ VkSurfaceKHR MirrorView::getSurface() const
 
 bool MirrorView::recreateSwapchain()
 {
+  if (!enabled)
+  {
+    return true;
+  }
+
+
   context->sync();
 
   const VkPhysicalDevice physicalDevice = context->getVkPhysicalDevice();
@@ -408,7 +434,7 @@ bool MirrorView::recreateSwapchain()
   swapchainCreateInfo.imageFormat = surfaceFormat.format;
   swapchainCreateInfo.imageExtent = surfaceCapabilities.currentExtent;
   swapchainCreateInfo.imageArrayLayers = 1u;
-  swapchainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+  swapchainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
   swapchainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
   swapchainCreateInfo.preTransform = surfaceCapabilities.currentTransform;
   swapchainCreateInfo.clipped = VK_TRUE;

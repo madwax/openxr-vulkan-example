@@ -17,7 +17,7 @@ class Renderer;
 class MirrorView final
 {
 public:
-  MirrorView(const Context* context);
+  MirrorView(const Context* context, bool disabled);
   ~MirrorView();
 
   void onWindowResize();
@@ -32,13 +32,17 @@ public:
     Invisible // Minimized window for example without rendering
   };
   RenderResult render(uint32_t swapchainImageIndex);
+  
   void present();
 
+  bool isEnabled() const { return enabled; }
   bool isValid() const;
   bool isExitRequested() const;
+
   VkSurfaceKHR getSurface() const;
 
 private:
+  bool enabled;
   bool valid = true;
 
   const Context* context = nullptr;

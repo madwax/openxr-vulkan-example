@@ -9,6 +9,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <chrono>
+#include <iostream>
 
 namespace
 {
@@ -25,7 +26,8 @@ int main()
     return EXIT_FAILURE;
   }
 
-  MirrorView mirrorView(&context);
+  MirrorView mirrorView(&context, true);
+
   if (!mirrorView.isValid())
   {
     return EXIT_FAILURE;
@@ -126,6 +128,16 @@ int main()
 
     uint32_t swapchainImageIndex;
     const Headset::BeginFrameResult frameResult = headset.beginFrame(swapchainImageIndex);
+
+    std::cout << "== SwapChainImage Index : " << swapchainImageIndex << std::endl;
+    switch( frameResult )
+    {
+      case Headset::BeginFrameResult::Error: { std::cout << "==== Mode : Error" << std::endl; } break;
+      case Headset::BeginFrameResult::RenderFully: { std::cout << "==== Mode : RenderFully" << std::endl; } break;
+      case Headset::BeginFrameResult::SkipRender: { std::cout << "==== Mode : SkipRender" << std::endl; } break;
+      case Headset::BeginFrameResult::SkipFully: { std::cout << "==== Mode : SkipFully" << std::endl; } break;
+    }
+
     if (frameResult == Headset::BeginFrameResult::Error)
     {
       return EXIT_FAILURE;
@@ -156,17 +168,17 @@ int main()
       handModelRight.worldMatrix = inverseCameraMatrix * controllers.getPose(1u);
       handModelRight.worldMatrix = glm::scale(handModelRight.worldMatrix, { -1.0f, 1.0f, 1.0f });
 
-      bikeModel.worldMatrix =
-        glm::rotate(glm::translate(glm::mat4(1.0f), { 0.5f, 0.0f, -4.5f }), time * 0.2f, { 0.0f, 1.0f, 0.0f });
+      bikeModel.worldMatrix =  glm::rotate(glm::translate(glm::mat4(1.0f), { 0.5f, 0.0f, -4.5f }), time * 0.2f, { 0.0f, 1.0f, 0.0f });
 
       // Render
       renderer.render(cameraMatrix, swapchainImageIndex, time);
-
+      
       const MirrorView::RenderResult mirrorResult = mirrorView.render(swapchainImageIndex);
       if (mirrorResult == MirrorView::RenderResult::Error)
       {
         return EXIT_FAILURE;
       }
+      
 
       const bool mirrorViewVisible = (mirrorResult == MirrorView::RenderResult::Visible);
       renderer.submit(mirrorViewVisible);
@@ -175,12 +187,10 @@ int main()
       {
         mirrorView.present();
       }
+
     }
 
-    if (frameResult == Headset::BeginFrameResult::RenderFully || frameResult == Headset::BeginFrameResult::SkipRender)
-    {
-      headset.endFrame();
-    }
+    headset.endFrame( frameResult );
   }
 
   context.sync(); // Sync before destroying so that resources are free

@@ -32,7 +32,7 @@ public:
     SkipFully    // Skip processing this frame entirely without ending it
   };
   BeginFrameResult beginFrame(uint32_t& swapchainImageIndex);
-  void endFrame() const;
+  void endFrame( const Headset::BeginFrameResult& frameState );
 
   bool isValid() const;
   bool isExitRequested() const;

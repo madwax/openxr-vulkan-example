@@ -77,7 +77,7 @@ Context::Context()
     memcpy(applicationInfo.applicationName, applicationName.data(), applicationName.length() + 1u);
     memcpy(applicationInfo.engineName, engineName.data(), engineName.length() + 1u);
 
-    std::vector<const char*> extensions = { XR_KHR_VULKAN_ENABLE_EXTENSION_NAME };
+    std::vector<const char*> extensions = { XR_KHR_VULKAN_ENABLE_EXTENSION_NAME, XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME };
 
 #ifdef DEBUG
     // Add the OpenXR debug instance extension
@@ -152,6 +152,16 @@ Context::Context()
     valid = false;
     return;
   }
+
+  if (!util::loadXrExtensionFunction(xrInstance, "xrGetVulkanGraphicsRequirementsKHR",
+                                     reinterpret_cast<PFN_xrVoidFunction*>(&xrGetVulkanGraphicsRequirementsKHR)))
+  {
+    util::error(Error::FeatureNotSupported, "OpenXR extension function \"xrGetVulkanGraphicsRequirementsKHR\"");
+    valid = false;
+    return;
+  }
+
+
 
 #ifdef DEBUG
   // Create an OpenXR debug utils messenger for validation
@@ -681,6 +691,8 @@ bool Context::createDevice(VkSurfaceKHR mirrorSurface)
   {
     // Retrieve the physical device properties
     VkPhysicalDeviceProperties physicalDeviceProperties;
+
+
     vkGetPhysicalDeviceProperties(physicalDevice, &physicalDeviceProperties);
     uniformBufferOffsetAlignment = physicalDeviceProperties.limits.minUniformBufferOffsetAlignment;
 
@@ -696,8 +708,12 @@ bool Context::createDevice(VkSurfaceKHR mirrorSurface)
       multisampleCount = VK_SAMPLE_COUNT_2_BIT;
     }
 
+    VkPhysicalDeviceFeatures physicalDeviceFeatures { };
+    VkPhysicalDeviceFeatures2 physicalDeviceFeatures2{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
+    VkPhysicalDeviceVulkan12Features physicalDeviceVulkan12Features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
+    VkPhysicalDeviceMultiviewFeatures physicalDeviceMultiviewFeatures{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES };
+
     // Verify that the required physical device features are supported
-    VkPhysicalDeviceFeatures physicalDeviceFeatures;
     vkGetPhysicalDeviceFeatures(physicalDevice, &physicalDeviceFeatures);
     if (!physicalDeviceFeatures.shaderStorageImageMultisample)
     {
@@ -705,11 +721,9 @@ bool Context::createDevice(VkSurfaceKHR mirrorSurface)
       return false;
     }
 
-    VkPhysicalDeviceFeatures2 physicalDeviceFeatures2{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
-    VkPhysicalDeviceMultiviewFeatures physicalDeviceMultiviewFeatures{
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES
-    };
-    physicalDeviceFeatures2.pNext = &physicalDeviceMultiviewFeatures;
+    physicalDeviceVulkan12Features.pNext = &physicalDeviceMultiviewFeatures;
+    physicalDeviceFeatures2.pNext = &physicalDeviceVulkan12Features;
+
     vkGetPhysicalDeviceFeatures2(physicalDevice, &physicalDeviceFeatures2);
     if (!physicalDeviceMultiviewFeatures.multiview)
     {
@@ -737,10 +751,10 @@ bool Context::createDevice(VkSurfaceKHR mirrorSurface)
     }
 
     VkDeviceCreateInfo deviceCreateInfo{ VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
-    deviceCreateInfo.pNext = &physicalDeviceMultiviewFeatures;
+    deviceCreateInfo.pNext = &physicalDeviceFeatures2;
     deviceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(vulkanDeviceExtensions.size());
     deviceCreateInfo.ppEnabledExtensionNames = vulkanDeviceExtensions.data();
-    deviceCreateInfo.pEnabledFeatures = &physicalDeviceFeatures;
+    deviceCreateInfo.pEnabledFeatures = nullptr; // &physicalDeviceFeatures;
     deviceCreateInfo.queueCreateInfoCount = static_cast<uint32_t>(deviceQueueCreateInfos.size());
     deviceCreateInfo.pQueueCreateInfos = deviceQueueCreateInfos.data();
     if (vkCreateDevice(physicalDevice, &deviceCreateInfo, nullptr, &device) != VK_SUCCESS)
